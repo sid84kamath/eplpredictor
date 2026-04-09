@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EPL Predictions Leaderboard - Demo</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --surface:   #111111;
+      --surface2:  #1a1a1a;
+      --border:    #242424;
+      --accent:    #00e676;
+      --accent-dim:#00e67622;
+      --text:      #f0f0f0;
+      --muted:     #666;
+      --gold:      #ffd700;
+      --silver:    #c0c0c0;
+      --bronze:    #cd7f32;
+      --radius:    14px;
+    }
+
+    html { background: var(--bg); }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 16px;
+      text-align: center;
+    }
+
+    .header-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .demo-tag {
+      display: inline-block;
+      background: #38003c;
+      border: 1px solid #6d1a75;
+      color: #e8b4f8;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+
+    .page {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .leaderboard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .leaderboard-header {
+      display: grid;
+      grid-template-columns: 60px 1fr 80px;
+      gap: 12px;
+      padding: 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .leaderboard-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 80px;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+      animation: slideIn 0.3s ease both;
+    }
+
+    .leaderboard-row:last-child { border-bottom: none; }
+    .leaderboard-row:hover { background: #0d0d0d; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .leaderboard-row:nth-child(1) { animation-delay: 0; }
+    .leaderboard-row:nth-child(2) { animation-delay: 0.05s; }
+    .leaderboard-row:nth-child(3) { animation-delay: 0.10s; }
+    .leaderboard-row:nth-child(4) { animation-delay: 0.15s; }
+    .leaderboard-row:nth-child(5) { animation-delay: 0.20s; }
+    .leaderboard-row:nth-child(n+6) { animation-delay: 0.25s; }
+
+    .rank {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .rank.gold { color: var(--gold); }
+    .rank.silver { color: var(--silver); }
+    .rank.bronze { color: var(--bronze); }
+
+    .rank-medal {
+      font-size: 20px;
+      margin-right: 4px;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .user-email {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .user-email-short {
+      font-size: 11px;
+      color: var(--muted);
+      word-break: break-all;
+    }
+
+    .points {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      text-align: right;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .points-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-align: right;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .refresh-info {
+      text-align: center;
+      padding: 16px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .refresh-time {
+      color: var(--accent);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-title">⚽ Leaderboard</div>
+    <div class="header-subtitle">Premier League Predictions</div>
+    <div class="demo-tag">DEMO DATA</div>
+  </div>
+
+  <div class="page">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Players</div>
+        <div class="stat-value">8</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Matches Scored</div>
+        <div class="stat-value">12</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Top Score</div>
+        <div class="stat-value">36</div>
+      </div>
+    </div>
+
+    <div class="leaderboard">
+      <div class="leaderboard-header">
+        <div>Rank</div>
+        <div>Player</div>
+        <div>Points</div>
+      </div>
+
+      <!-- 1st Place -->
+      <div class="leaderboard-row">
+        <div class="rank gold">1 🥇</div>
+        <div class="user-info">
+          <div class="user-email">sid84kamath@gmail.com</div>
+        </div>
+        <div>
+          <div class="points">36</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 2nd Place -->
+      <div class="leaderboard-row">
+        <div class="rank silver">2 🥈</div>
+        <div class="user-info">
+          <div class="user-email">neha19shah@gmail.com</div>
+        </div>
+        <div>
+          <div class="points">33</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 3rd Place -->
+      <div class="leaderboard-row">
+        <div class="rank bronze">3 🥉</div>
+        <div class="user-info">
+          <div class="user-email">john.doe@example.com</div>
+        </div>
+        <div>
+          <div class="points">28</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 4th Place -->
+      <div class="leaderboard-row">
+        <div class="rank">4</div>
+        <div class="user-info">
+          <div class="user-email">emma.wilson@example.com</div>
+        </div>
+        <div>
+          <div class="points">25</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 5th Place -->
+      <div class="leaderboard-row">
+        <div class="rank">5</div>
+        <div class="user-info">
+          <div class="user-email">michael.chen@example.com</div>
+        </div>
+        <div>
+          <div class="points">22</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 6th Place -->
+      <div class="leaderboard-row">
+        <div class="rank">6</div>
+        <div class="user-info">
+          <div class="user-email">sarah.smith@example.com</div>
+        </div>
+        <div>
+          <div class="points">18</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 7th Place -->
+      <div class="leaderboard-row">
+        <div class="rank">7</div>
+        <div class="user-info">
+          <div class="user-email">alex.kumar@example.com</div>
+        </div>
+        <div>
+          <div class="points">15</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+
+      <!-- 8th Place -->
+      <div class="leaderboard-row">
+        <div class="rank">8</div>
+        <div class="user-info">
+          <div class="user-email">jessica.brown@example.com</div>
+        </div>
+        <div>
+          <div class="points">9</div>
+          <div class="points-label">pts</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="refresh-info">
+      ✨ This is demo data showing the leaderboard design. Real data will load from Google Sheets once integrated.
+    </div>
+  </div>
+
+</body>
+</html>
