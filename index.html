@@ -666,17 +666,23 @@
     btn.classList.add('loading');
 
     try {
-      for (const p of predictions) {
-        const res    = await fetch(BACKEND_URL, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ email: userEmail, ...p })
-        });
-        const result = await safeJSON(res);
-        if (result.status === 'duplicate') {
-          showAlreadySubmitted();
-          return;
-        }
+      const res = await fetch(BACKEND_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          email: userEmail,
+          predictions: predictions
+        })
+      });
+      const result = await safeJSON(res);
+
+      if (result.status === 'duplicate') {
+        showAlreadySubmitted();
+        return;
+      }
+
+      if (result.status !== 'ok') {
+        throw new Error(result.message || 'Submission failed');
       }
 
       document.getElementById('footerBar').style.display = 'none';
