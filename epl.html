@@ -561,11 +561,10 @@
         return;
       }
 
-      const firstDate = new Date(upcoming[0].utcDate);
-      const gameweek  = upcoming.filter(m => {
-        const diff = (new Date(m.utcDate) - firstDate) / (1000 * 60 * 60 * 24);
-        return diff >= 0 && diff <= 4;
-      });
+      const targetMatchday = upcoming[0].matchday;
+      const gameweek = targetMatchday == null
+        ? upcoming
+        : upcoming.filter(m => m.matchday === targetMatchday);
 
       roundLabel.textContent = `Gameweek ${gameweek[0].matchday} · ${gameweek.length} matches`;
       matchesDiv.innerHTML = '';
