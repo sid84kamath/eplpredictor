@@ -596,10 +596,10 @@
           </div>
           <div class="score-row">
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
-              id="home-${id}" oninput="onScoreInput()" inputmode="numeric">
+              id="home-${id}" oninput="onScoreInput(event)" inputmode="numeric">
             <div class="score-sep">:</div>
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
-              id="away-${id}" oninput="onScoreInput()" inputmode="numeric">
+              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
           </div>`;
 
         matchesDiv.appendChild(card);
@@ -619,7 +619,11 @@
     }
   }
 
-  function onScoreInput() {
+  function onScoreInput(event) {
+    if (event && event.target && event.target.value !== '') {
+      focusNextScoreInput(event.target);
+    }
+
     updateProgress();
     (window.currentMatches || []).forEach(m => {
       const id   = String(m.id);
@@ -628,6 +632,21 @@
       const a    = document.getElementById(`away-${id}`).value;
       if (card) card.classList.toggle('filled', h !== '' && a !== '');
     });
+  }
+
+  function focusNextScoreInput(currentInput) {
+    const scoreInputs = Array.from(document.querySelectorAll('.score-input'));
+    const currentIndex = scoreInputs.indexOf(currentInput);
+
+    if (currentIndex === -1 || currentIndex === scoreInputs.length - 1) {
+      return;
+    }
+
+    const nextInput = scoreInputs[currentIndex + 1];
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+    }
   }
 
   function updateProgress() {
