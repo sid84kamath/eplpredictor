@@ -494,6 +494,31 @@
     catch(e) { return {}; }
   }
 
+  async function fetchJSONWithRetry(url, attempts = 2, delayMs = 800) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await fetch(url);
+        const data = await safeJSON(res);
+
+        if (!res.ok) {
+          const message = data.detail || data.error || `HTTP ${res.status}`;
+          throw new Error(message);
+        }
+
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
   // Invalid link guard
   if (!userEmail) {
     document.querySelector('.header').style.display = 'none';
@@ -542,8 +567,7 @@
       </div>`;
 
     try {
-      const res  = await fetch(API_URL);
-      const data = await safeJSON(res);
+      const data = await fetchJSONWithRetry(API_URL, 2, 1000);
 
       if (!data || !Array.isArray(data.matches)) throw new Error('Bad API response');
 
@@ -614,7 +638,7 @@
       matchesDiv.innerHTML = `
         <div class="empty-state">
           <div class="icon">⚠️</div>
-          <p>Failed to load fixtures.<br>Please try again in a moment.</p>
+          <p>Failed to load fixtures.<br>${err.message || 'Please try again in a moment.'}</p>
         </div>`;
     }
   }
