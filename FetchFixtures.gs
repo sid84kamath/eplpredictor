@@ -13,31 +13,19 @@ function fetchFixtures() {
   }
 
   const now = new Date();
+  const gameweek = getUpcomingGameweekMatches(matches, now);
 
-  // Filter for upcoming matches only
-  const upcomingMatches = matches.filter(m => new Date(m.utcDate) > now);
-
-  if (upcomingMatches.length === 0) {
+  if (gameweek.length === 0) {
     Logger.log("No upcoming matches");
     return;
   }
 
-  // Sort by date
-  upcomingMatches.sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
-
   // First upcoming match
-  const firstDate = new Date(upcomingMatches[0].utcDate);
+  const firstDate = new Date(gameweek[0].utcDate);
   const firstDateStr = firstDate.toISOString().split("T")[0];
+  const matchday = gameweek[0].matchday;
   Logger.log("First match date from API: " + firstDateStr);
-  Logger.log("Total upcoming matches fetched: " + upcomingMatches.length);
-
-  // Group gameweek (4-day window to capture full gameweek)
-  const gameweek = upcomingMatches.filter(m => {
-    const d = new Date(m.utcDate);
-    const diff = (d - firstDate) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 4;
-  });
-
+  Logger.log("Current gameweek matchday: " + matchday);
   Logger.log("Gameweek matches to add: " + gameweek.length);
 
   // Clear old matches (anything before current gameweek anchor)
@@ -71,22 +59,4 @@ function fetchFixtures() {
   });
 
   Logger.log("Added " + addedCount + " new matches");
-
-  // Reset processed flag to false for all current gameweek matches (within 4-day window)
-  const allData = sheet.getDataRange().getValues();
-  let resetCount = 0;
-  for (let i = 1; i < allData.length; i++) {
-    const row = allData[i];
-    const rowDate = row[1] ? new Date(row[1]) : null;
-    
-    if (rowDate) {
-      const diff = (rowDate - firstDate) / (1000 * 60 * 60 * 24);
-      if (diff >= 0 && diff <= 4) {
-        sheet.getRange(i + 1, 5).setValue(false);
-        resetCount++;
-      }
-    }
-  }
-
-  Logger.log("Reset processed flag to false for " + resetCount + " gameweek matches");
 }
