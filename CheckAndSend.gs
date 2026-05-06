@@ -1,13 +1,16 @@
 function checkAndSendPredictions() {
   const BASE_APP_URL = "https://eplpredictor.pages.dev";
-  const PREDICTION_GAMEWEEK_SENT_CELL = "B6";
+  const LAST_SENT_STATE_KEY = "last_sent";
+  const LAST_SENT_FALLBACK_CELL = "B2";
+  const PREDICTION_GAMEWEEK_SENT_STATE_KEY = "prediction_gameweek_sent";
+  const PREDICTION_GAMEWEEK_SENT_FALLBACK_CELL = "B6";
   const YOUR_NAME = "Siddharth Kamath"; // change to your name
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const stateSheet = ss.getSheetByName("State");
 
-  const lastSent = stateSheet.getRange("B2").getValue();
-  const lastSentGameweekKey = String(stateSheet.getRange(PREDICTION_GAMEWEEK_SENT_CELL).getValue() || "");
+  const lastSent = getStateValue_(stateSheet, LAST_SENT_STATE_KEY, LAST_SENT_FALLBACK_CELL);
+  const lastSentGameweekKey = String(getStateValue_(stateSheet, PREDICTION_GAMEWEEK_SENT_STATE_KEY, PREDICTION_GAMEWEEK_SENT_FALLBACK_CELL) || "");
 
   // 🔥 Fetch fixtures via your worker
   const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches");
@@ -63,6 +66,14 @@ function checkAndSendPredictions() {
         return { id: row[0] };
       })
   );
+  const fixtureRowsForGameweek = getFixtureRowsForGameweek_(fixtureData, currentGameweekKey);
+
+  if (currentFixtureGameweekKey === currentGameweekKey && areFixtureRowsProcessed_(fixtureData, fixtureRowsForGameweek)) {
+    Logger.log("Fixtures sheet is already marked processed for this gameweek; repairing sent state and skipping emails");
+    setStateValue_(stateSheet, LAST_SENT_STATE_KEY, nextDateStr, LAST_SENT_FALLBACK_CELL);
+    setStateValue_(stateSheet, PREDICTION_GAMEWEEK_SENT_STATE_KEY, currentGameweekKey, PREDICTION_GAMEWEEK_SENT_FALLBACK_CELL);
+    return;
+  }
 
   // 📧 Send to all users
   EMAILS.forEach(email => {
@@ -190,19 +201,42 @@ function checkAndSendPredictions() {
   });
 
   // ✅ update state
-  stateSheet.getRange("B2").setValue(nextDateStr);
-  stateSheet.getRange(PREDICTION_GAMEWEEK_SENT_CELL).setValue(currentGameweekKey);
+  setStateValue_(stateSheet, LAST_SENT_STATE_KEY, nextDateStr, LAST_SENT_FALLBACK_CELL);
+  setStateValue_(stateSheet, PREDICTION_GAMEWEEK_SENT_STATE_KEY, currentGameweekKey, PREDICTION_GAMEWEEK_SENT_FALLBACK_CELL);
 
-  if (currentFixtureGameweekKey === currentGameweekKey) {
+  if (fixtureRowsForGameweek.length === gameweek.length) {
     Logger.log("Marking current fixture rows as processed");
-    for (let i = 1; i < fixtureData.length; i++) {
-      if (fixtureData[i][0]) {
-        fixtureSheet.getRange(i + 1, 5).setValue(true);
-      }
-    }
+    fixtureRowsForGameweek.forEach(function(rowNum) {
+      fixtureSheet.getRange(rowNum, 5).setValue(true);
+    });
   } else {
-    Logger.log("Skipping processed-flag update because Fixtures sheet does not match the emailed gameweek");
+    Logger.log("Skipping processed-flag update because Fixtures sheet does not contain every emailed fixture");
   }
 
+  SpreadsheetApp.flush();
   Logger.log("Emails sent + state updated");
+}
+
+function getFixtureRowsForGameweek_(fixtureData, gameweekKey) {
+  var fixtureIds = {};
+  String(gameweekKey || '').split('|').forEach(function(id) {
+    if (id) {
+      fixtureIds[id] = true;
+    }
+  });
+
+  var rows = [];
+  for (var i = 1; i < fixtureData.length; i++) {
+    if (fixtureIds[String(fixtureData[i][0])]) {
+      rows.push(i + 1);
+    }
+  }
+
+  return rows;
+}
+
+function areFixtureRowsProcessed_(fixtureData, fixtureRows) {
+  return fixtureRows.length > 0 && fixtureRows.every(function(rowNum) {
+    return fixtureData[rowNum - 1][4] === true;
+  });
 }

@@ -45,9 +45,13 @@ function getUpcomingGameweekMatches(matches, now) {
     return upcomingMatches;
   }
 
-  return upcomingMatches.filter(function(match) {
-    return match.matchday === targetMatchday;
-  });
+  return matches
+    .filter(function(match) {
+      return match && match.matchday === targetMatchday;
+    })
+    .sort(function(a, b) {
+      return new Date(a.utcDate) - new Date(b.utcDate);
+    });
 }
 
 function getGameweekKey(matches) {
@@ -128,6 +132,46 @@ function getPreviousGameweekCompletionState(matches, now) {
     matchday: previousMatchday,
     totalFixtures: previousGameweek.length
   };
+}
+
+function getStateValue_(stateSheet, key, fallbackA1) {
+  var row = findStateRow_(stateSheet, key);
+  if (row) {
+    return stateSheet.getRange(row, 2).getValue();
+  }
+
+  return fallbackA1 ? stateSheet.getRange(fallbackA1).getValue() : '';
+}
+
+function setStateValue_(stateSheet, key, value, fallbackA1) {
+  var row = findStateRow_(stateSheet, key);
+  if (row) {
+    stateSheet.getRange(row, 2).setValue(value);
+    return;
+  }
+
+  if (fallbackA1) {
+    stateSheet.getRange(fallbackA1).setValue(value);
+    return;
+  }
+
+  stateSheet.appendRow([key, value]);
+}
+
+function findStateRow_(stateSheet, key) {
+  var lastRow = stateSheet.getLastRow();
+  if (lastRow < 1) {
+    return null;
+  }
+
+  var keys = stateSheet.getRange(1, 1, lastRow, 1).getValues();
+  for (var i = 0; i < keys.length; i++) {
+    if (String(keys[i][0]) === key) {
+      return i + 1;
+    }
+  }
+
+  return null;
 }
 
 function fetchWithRetry(url, attempts) {
