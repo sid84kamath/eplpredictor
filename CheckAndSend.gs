@@ -1,17 +1,13 @@
 function checkAndSendPredictions() {
-  const BASE_APP_URL = "https://epl-predictor-us.netlify.app";
-
-  const EMAILS = [
-    "sid84kamath@gmail.com"
-  ];
+  const BASE_APP_URL = "https://eplpredictor.pages.dev";
+  const PREDICTION_GAMEWEEK_SENT_CELL = "B6";
   const YOUR_NAME = "Siddharth Kamath"; // change to your name
-
-  const SHEET_ID = "1x1x-AODInrXF1FYNMls63GdQt96EdSl_LmRysok-jcM";
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const stateSheet = ss.getSheetByName("State");
 
   const lastSent = stateSheet.getRange("B2").getValue();
+  const lastSentGameweekKey = String(stateSheet.getRange(PREDICTION_GAMEWEEK_SENT_CELL).getValue() || "");
 
   // 🔥 Fetch fixtures via your worker
   const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches");
@@ -20,75 +16,53 @@ function checkAndSendPredictions() {
 
   const now = new Date();
 
-  // get upcoming matches
-  const upcoming = data.matches
-    .filter(m => new Date(m.utcDate) > now)
-    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  const gameweek = getUpcomingGameweekMatches(data.matches, now);
+  const previousGameweekState = getPreviousGameweekCompletionState(data.matches, now);
 
-  if (upcoming.length === 0) {
+  if (gameweek.length === 0) {
     Logger.log("No upcoming matches");
     return;
   }
 
   // next match = gameweek anchor
-  const nextMatchDate = new Date(upcoming[0].utcDate);
+  const nextMatchDate = new Date(gameweek[0].utcDate);
 
   // normalize date (important)
   const nextDateStr = nextMatchDate.toISOString().split("T")[0];
+  const currentGameweekKey = getGameweekKey(gameweek);
 
   Logger.log("Next match date:", nextDateStr);
   Logger.log("Last sent:", lastSent);
+  Logger.log("Current gameweek key:", currentGameweekKey);
+  Logger.log("Last sent gameweek key:", lastSentGameweekKey);
+  Logger.log("Previous gameweek matchday:", previousGameweekState.matchday);
+
+  if (previousGameweekState.totalFixtures === 0) {
+    Logger.log("No previous gameweek fixtures found; skipping prediction emails");
+    return;
+  }
+
+  if (!previousGameweekState.allFinished) {
+    Logger.log("Previous gameweek is not finished yet (" + previousGameweekState.finishedFixtures + "/" + previousGameweekState.totalFixtures + " matches finished)");
+    return;
+  }
 
   // 🧠 KEY LOGIC
-  if (nextDateStr === lastSent) {
+  if (currentGameweekKey === lastSentGameweekKey) {
     Logger.log("Already sent for this gameweek");
     return;
   }
+  Logger.log("Previous gameweek is complete; sending emails for upcoming gameweek with " + gameweek.length + " matches");
 
-  // 🚀 SEND EMAILS
   const fixtureSheet = ss.getSheetByName("Fixtures");
   const fixtureData = fixtureSheet.getDataRange().getValues();
-
-  // Find all matches in current gameweek and check if processed
-  let gameweekProcessed = false;
-  let gameweekRows = [];
-
-  for (let i = 1; i < fixtureData.length; i++) {
-    const row = fixtureData[i];
-    let matchDate = '';
-    
-    try {
-      if (row[1]) {
-        const dateObj = new Date(row[1]);
-        matchDate = dateObj.toISOString().split('T')[0];
-      }
-    } catch (e) {
-      Logger.log("Date parse error at row " + (i + 1) + ": " + e.message);
-      continue;
-    }
-    
-    // Check if this match is within the gameweek (4-day window from anchor)
-    const nextMatchDate = new Date(nextDateStr + 'T00:00:00Z');
-    const matchDateObj = new Date(matchDate + 'T00:00:00Z');
-    const diff = (matchDateObj - nextMatchDate) / (1000 * 60 * 60 * 24);
-    
-    Logger.log("Checking row " + (i + 1) + " - matchDate: " + matchDate + ", nextDateStr: " + nextDateStr + ", diff: " + diff + ", processed: " + row[4]);
-    
-    if (diff >= 0 && diff <= 4) {  // Within gameweek window
-      gameweekRows.push(i + 1); // Store row numbers for updating
-      if (row[4] === true) {
-        gameweekProcessed = true;  // If any match in gameweek is processed, flag it
-      }
-    }
-  }
-
-  // If already processed, skip
-  if (gameweekProcessed === true) {
-    Logger.log("Emails already sent for this gameweek");
-    return;
-  }
-
-  Logger.log("Found " + gameweekRows.length + " matches for gameweek, will send emails");
+  const currentFixtureGameweekKey = getGameweekKey(
+    fixtureData.slice(1)
+      .filter(function(row) { return row[0]; })
+      .map(function(row) {
+        return { id: row[0] };
+      })
+  );
 
   // 📧 Send to all users
   EMAILS.forEach(email => {
@@ -215,14 +189,20 @@ function checkAndSendPredictions() {
     });
   });
 
-  // ✅ Mark ALL gameweek matches as processed
-  Logger.log("Marking " + gameweekRows.length + " rows as processed");
-  gameweekRows.forEach(rowNum => {
-    fixtureSheet.getRange(rowNum, 5).setValue(true); // Column 5 = "processed"
-  });
-
   // ✅ update state
   stateSheet.getRange("B2").setValue(nextDateStr);
+  stateSheet.getRange(PREDICTION_GAMEWEEK_SENT_CELL).setValue(currentGameweekKey);
+
+  if (currentFixtureGameweekKey === currentGameweekKey) {
+    Logger.log("Marking current fixture rows as processed");
+    for (let i = 1; i < fixtureData.length; i++) {
+      if (fixtureData[i][0]) {
+        fixtureSheet.getRange(i + 1, 5).setValue(true);
+      }
+    }
+  } else {
+    Logger.log("Skipping processed-flag update because Fixtures sheet does not match the emailed gameweek");
+  }
 
   Logger.log("Emails sent + state updated");
 }
