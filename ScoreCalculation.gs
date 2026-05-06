@@ -2,6 +2,7 @@ function updateScores() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const predictionsSheet = ss.getSheetByName("Predictions");
   const leaderboardSheet = ss.getSheetByName("Leaderboard");
+  const existingLeaderboard = getLeaderboardTotals_(leaderboardSheet);
 
   // Fetch finished matches from API
   const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches?status=FINISHED");
@@ -25,13 +26,14 @@ function updateScores() {
 
   // Get all predictions
   const predData = predictionsSheet.getDataRange().getValues();
-  const leaderboard = {};
+  const leaderboard = Object.assign({}, existingLeaderboard);
   const scoredRows = [];
 
   // Process each prediction
   for (let i = 1; i < predData.length; i++) {
     const row = predData[i];
     const email = String(row[1]);
+    const playerName = getPlayerNameByEmail(email);
     const matchId = String(row[2]);
     const homePred = parseInt(row[3]);
     const awayPred = parseInt(row[4]);
@@ -61,7 +63,7 @@ function updateScores() {
     // Exact score: 3 points
     if (homePred === actual.homeScore && awayPred === actual.awayScore) {
       points = 3;
-      Logger.log(email + " - Match " + matchId + ": Exact score prediction ✅ (+3 pts)");
+      Logger.log(playerName + " - Match " + matchId + ": Exact score prediction ✅ (+3 pts)");
     }
     // Correct result: 1 point
     else if (
@@ -70,16 +72,21 @@ function updateScores() {
       (homePred === awayPred && actual.homeScore === actual.awayScore)  // Draw
     ) {
       points = 1;
-      Logger.log(email + " - Match " + matchId + ": Correct result prediction ✅ (+1 pt)");
+      Logger.log(playerName + " - Match " + matchId + ": Correct result prediction ✅ (+1 pt)");
     } else {
-      Logger.log(email + " - Match " + matchId + ": Wrong prediction ❌ (0 pts)");
+      Logger.log(playerName + " - Match " + matchId + ": Wrong prediction ❌ (0 pts)");
     }
 
     // Add to leaderboard
-    leaderboard[email] = (leaderboard[email] || 0) + points;
+    leaderboard[playerName] = (leaderboard[playerName] || 0) + points;
     
     // Mark this row as scored (row number is i+1, but array index for getRange is i+1)
     scoredRows.push(i + 1);
+  }
+
+  if (scoredRows.length === 0) {
+    Logger.log("No new predictions were scored");
+    return false;
   }
 
   // Mark all scored predictions
@@ -91,13 +98,37 @@ function updateScores() {
   // Update leaderboard sheet
   Logger.log("Updating leaderboard with " + Object.keys(leaderboard).length + " users");
   leaderboardSheet.clear();
-  leaderboardSheet.appendRow(["Email", "Points"]);
+  leaderboardSheet.appendRow(["Name", "Points"]);
 
   Object.entries(leaderboard)
     .sort((a, b) => b[1] - a[1])  // Sort by points descending
-    .forEach(([email, pts]) => {
-      leaderboardSheet.appendRow([email, pts]);
+    .forEach(([name, pts]) => {
+      leaderboardSheet.appendRow([name, pts]);
     });
 
   Logger.log("Leaderboard updated successfully");
+  return true;
+}
+
+function getLeaderboardTotals_(leaderboardSheet) {
+  const rows = leaderboardSheet.getDataRange().getValues();
+  const totals = {};
+
+  for (let i = 1; i < rows.length; i++) {
+    const rawName = rows[i][0];
+    if (!rawName) continue;
+
+    const normalizedName = normalizeLeaderboardName_(String(rawName));
+    totals[normalizedName] = (totals[normalizedName] || 0) + (Number(rows[i][1]) || 0);
+  }
+
+  return totals;
+}
+
+function normalizeLeaderboardName_(value) {
+  if (value.indexOf("@") !== -1) {
+    return getPlayerNameByEmail(value);
+  }
+
+  return value;
 }
