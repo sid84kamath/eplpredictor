@@ -68,7 +68,7 @@ function sendLeaderboardEmailAfterGameweekComplete() {
     throw new Error("State sheet not found");
   }
 
-  const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches");
+  const res = fetchFootballData("/competitions/PL/matches");
   const data = JSON.parse(res.getContentText());
   const fixtureState = getPreviousGameweekCompletionState(data.matches || [], new Date());
 
