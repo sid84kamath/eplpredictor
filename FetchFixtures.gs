@@ -2,13 +2,16 @@ function fetchFixtures() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("Fixtures");
 
-  const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches");
+  const res = fetchFootballData("/competitions/PL/matches");
   const data = JSON.parse(res.getContentText());
 
-  const matches = data.matches;
+  const matches = (data.matches || []).filter(function(match) {
+    return match && match.utcDate && new Date(match.utcDate) > new Date();
+  });
 
-  if (!matches || matches.length === 0) {
+  if (matches.length === 0) {
     Logger.log("No scheduled matches");
+    clearFixtureRows_(sheet);
     return;
   }
 
@@ -17,6 +20,7 @@ function fetchFixtures() {
 
   if (gameweek.length === 0) {
     Logger.log("No upcoming matches");
+    clearFixtureRows_(sheet);
     return;
   }
 
@@ -28,35 +32,43 @@ function fetchFixtures() {
   Logger.log("Current gameweek matchday: " + matchday);
   Logger.log("Gameweek matches to add: " + gameweek.length);
 
-  // Clear old matches (anything before current gameweek anchor)
-  const sheetData = sheet.getDataRange().getValues();
-  for (let i = sheetData.length - 1; i > 0; i--) { // Start from end to avoid index shifting
-    const rowDate = sheetData[i][1] ? String(new Date(sheetData[i][1]).toISOString()).split('T')[0] : '';
-    if (rowDate < firstDateStr) {
-      Logger.log("Deleting old row " + (i + 1) + " with date: " + rowDate);
-      sheet.deleteRow(i + 1);
-    }
-  }
+  const processedByMatchId = getProcessedFixtureState_(sheet);
+  clearFixtureRows_(sheet);
 
-  // Append current gameweek matches
-  let addedCount = 0;
-  gameweek.forEach(m => {
-    const exists = sheet.createTextFinder(m.id).findNext();
-    if (exists) {
-      Logger.log("Match " + m.id + " already exists, skipping");
-      return;
-    }
-
+  // Replace the Fixtures sheet with only the current upcoming gameweek.
+  // This keeps old season rows (for example August 2025 fixtures) from lingering
+  // when football-data.org returns a full-season match list.
+  gameweek.forEach(function(m) {
     Logger.log("Adding match " + m.id + " on " + m.utcDate);
     sheet.appendRow([
       m.id,
       m.utcDate,
       m.homeTeam.name,
       m.awayTeam.name,
-      false
+      processedByMatchId[String(m.id)] === true
     ]);
-    addedCount++;
   });
 
-  Logger.log("Added " + addedCount + " new matches");
+  Logger.log("Replaced Fixtures sheet with " + gameweek.length + " current gameweek matches");
+}
+
+function getProcessedFixtureState_(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const processedByMatchId = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const matchId = data[i][0];
+    if (matchId) {
+      processedByMatchId[String(matchId)] = data[i][4] === true;
+    }
+  }
+
+  return processedByMatchId;
+}
+
+function clearFixtureRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
 }
