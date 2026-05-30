@@ -12,8 +12,8 @@ function checkAndSendPredictions() {
   const lastSent = getStateValue_(stateSheet, LAST_SENT_STATE_KEY, LAST_SENT_FALLBACK_CELL);
   const lastSentGameweekKey = String(getStateValue_(stateSheet, PREDICTION_GAMEWEEK_SENT_STATE_KEY, PREDICTION_GAMEWEEK_SENT_FALLBACK_CELL) || "");
 
-  // 🔥 Fetch fixtures from football-data.org (with Worker fallback)
-  const res = fetchFootballData("/competitions/PL/matches");
+  // 🔥 Fetch fixtures via your worker
+  const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches");
 
   const data = JSON.parse(res.getContentText());
 

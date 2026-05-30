@@ -1,7 +1,4 @@
 const BASE_URL = "https://eplpredictor.pages.dev";
-const FOOTBALL_API_BASE_URL = "https://api.football-data.org/v4";
-const FOOTBALL_API_PROXY_URL = "https://epl.sid84kamath.workers.dev";
-const FOOTBALL_DATA_API_KEY = "09fedeb5e296477dbb31b5072e3612b1";
 const SHEET_ID = "1x1x-AODInrXF1FYNMls63GdQt96EdSl_LmRysok-jcM";
 const PLAYERS = [
   { name: "Siddharth", email: "sid84kamath@gmail.com" },
@@ -71,7 +68,7 @@ function getPreviousGameweekCompletionState(matches, now) {
   var upcomingGameweek = getUpcomingGameweekMatches(matches, referenceTime);
 
   if (upcomingGameweek.length === 0) {
-    return getLatestCompletedGameweekState_(matches);
+    return getLatestGameweekCompletionState_(matches);
   }
 
   var upcomingMatchday = upcomingGameweek[0].matchday;
@@ -107,7 +104,7 @@ function getPreviousGameweekCompletionState(matches, now) {
   return getGameweekCompletionState_(matches, previousMatchday);
 }
 
-function getLatestCompletedGameweekState_(matches) {
+function getLatestGameweekCompletionState_(matches) {
   var matchdays = matches
     .map(function(match) {
       return Number(match.matchday);
@@ -197,56 +194,21 @@ function findStateRow_(stateSheet, key) {
   return null;
 }
 
-function fetchFootballData(path, attempts) {
-  var normalizedPath = path.charAt(0) === "/" ? path : "/" + path;
-  var directUrl = FOOTBALL_API_BASE_URL + normalizedPath;
-  var proxyUrl = FOOTBALL_API_PROXY_URL + normalizedPath;
-
-  try {
-    return fetchWithRetry(directUrl, attempts, {
-      headers: { "X-Auth-Token": getFootballDataApiKey_() },
-      muteHttpExceptions: true
-    });
-  } catch (directError) {
-    Logger.log("Direct football-data.org fetch failed, falling back to Worker proxy: " + directError.message);
-    return fetchWithRetry(proxyUrl, attempts);
-  }
-}
-
-function getFootballDataApiKey_() {
-  return PropertiesService.getScriptProperties().getProperty("FOOTBALL_DATA_API_KEY") || FOOTBALL_DATA_API_KEY;
-}
-
-function fetchWithRetry(url, attempts, params) {
+function fetchWithRetry(url, attempts) {
   attempts = attempts || 4;
-  params = params || {};
-
-  var delays = [0, 2000, 5000, 10000];
-  var lastError = '';
+  var delays = [2000, 5000, 10000, 15000];
 
   for (var i = 0; i < attempts; i++) {
-    if (delays[i]) {
-      Utilities.sleep(delays[i]);
-    }
-
     try {
-      var requestParams = Object.assign({ muteHttpExceptions: true }, params);
-      var res  = UrlFetchApp.fetch(url, requestParams);
+      Utilities.sleep(delays[i]);
+      var res  = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
       var code = res.getResponseCode();
-      Logger.log('Attempt ' + (i+1) + ' — HTTP ' + code + ' — ' + url);
-
-      if (code >= 200 && code < 300) {
-        return res;
-      }
-
-      var responseText = res.getContentText().substring(0, 500);
-      lastError = 'HTTP ' + code + ': ' + responseText;
-      Logger.log('Response: ' + responseText);
+      Logger.log('Attempt ' + (i+1) + ' — HTTP ' + code);
+      if (code === 200) return res;
+      Logger.log('Response: ' + res.getContentText().substring(0, 200));
     } catch(e) {
-      lastError = e.message;
       Logger.log('Attempt ' + (i+1) + ' failed: ' + e.message);
     }
   }
-
-  throw new Error('All ' + attempts + ' attempts failed for ' + url + (lastError ? ' — last error: ' + lastError : ''));
+  throw new Error('All ' + attempts + ' attempts failed for ' + url);
 }

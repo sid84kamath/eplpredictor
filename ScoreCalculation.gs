@@ -5,7 +5,7 @@ function updateScores() {
   const existingLeaderboard = getLeaderboardTotals_(leaderboardSheet);
 
   // Fetch finished matches from API
-  const res = fetchFootballData("/competitions/PL/matches?status=FINISHED");
+  const res = fetchWithRetry("https://epl.sid84kamath.workers.dev/competitions/PL/matches?status=FINISHED");
   const finishedMatches = JSON.parse(res.getContentText()).matches;
 
   if (!finishedMatches || finishedMatches.length === 0) {
