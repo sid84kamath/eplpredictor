@@ -71,13 +71,7 @@ function getPreviousGameweekCompletionState(matches, now) {
   var upcomingGameweek = getUpcomingGameweekMatches(matches, referenceTime);
 
   if (upcomingGameweek.length === 0) {
-    return {
-      allFinished: false,
-      finishedFixtures: 0,
-      gameweekKey: "",
-      matchday: null,
-      totalFixtures: 0
-    };
+    return getLatestGameweekCompletionState_(matches);
   }
 
   var upcomingMatchday = upcomingGameweek[0].matchday;
@@ -110,30 +104,56 @@ function getPreviousGameweekCompletionState(matches, now) {
   }
 
   var previousMatchday = Math.max.apply(null, candidateMatchdays);
-  var previousGameweek = matches.filter(function(match) {
-    return Number(match.matchday) === previousMatchday;
-  });
+  return getGameweekCompletionState_(matches, previousMatchday);
+}
 
-  if (previousGameweek.length === 0) {
+function getLatestGameweekCompletionState_(matches) {
+  var matchdays = matches
+    .map(function(match) {
+      return Number(match.matchday);
+    })
+    .filter(function(matchday) {
+      return !isNaN(matchday);
+    });
+
+  if (matchdays.length === 0) {
     return {
       allFinished: false,
       finishedFixtures: 0,
       gameweekKey: "",
-      matchday: previousMatchday,
+      matchday: null,
       totalFixtures: 0
     };
   }
 
-  var finishedFixtures = previousGameweek.filter(function(match) {
+  return getGameweekCompletionState_(matches, Math.max.apply(null, matchdays));
+}
+
+function getGameweekCompletionState_(matches, matchday) {
+  var gameweek = matches.filter(function(match) {
+    return Number(match.matchday) === Number(matchday);
+  });
+
+  if (gameweek.length === 0) {
+    return {
+      allFinished: false,
+      finishedFixtures: 0,
+      gameweekKey: "",
+      matchday: matchday,
+      totalFixtures: 0
+    };
+  }
+
+  var finishedFixtures = gameweek.filter(function(match) {
     return match.status === 'FINISHED';
   }).length;
 
   return {
-    allFinished: finishedFixtures === previousGameweek.length,
+    allFinished: finishedFixtures === gameweek.length,
     finishedFixtures: finishedFixtures,
-    gameweekKey: getGameweekKey(previousGameweek),
-    matchday: previousMatchday,
-    totalFixtures: previousGameweek.length
+    gameweekKey: getGameweekKey(gameweek),
+    matchday: matchday,
+    totalFixtures: gameweek.length
   };
 }
 
