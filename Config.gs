@@ -4,14 +4,7 @@ const FOOTBALL_API_PROXY_URL = "https://epl.sid84kamath.workers.dev";
 const FOOTBALL_DATA_API_KEY = "09fedeb5e296477dbb31b5072e3612b1";
 const SHEET_ID = "1x1x-AODInrXF1FYNMls63GdQt96EdSl_LmRysok-jcM";
 const PLAYERS = [
-  { name: "Siddharth", email: "sid84kamath@gmail.com" },
-  { name: "Neha", email: "neha19shah@gmail.com" },
-  { name: "Aditya", email: "adimails@gmail.com" },
-  { name: "Atulya", email: "atulyasv@gmail.com" },
-  {name: "Shreyans", email: "shreyansshah008@gmail.com"},
-  {name: "Shantanu", email: "shantanukulkarni17@gmail.com"},
-  {name: "Raunak", email: "phade.raunak@gmail.com"},
-  {name: "Sid Kulkarni", email: "siddharth1329@gmail.com"}
+  { name: "Siddharth", email: "sid84kamath@gmail.com" }
 ];
 const EMAILS = PLAYERS.map(function(player) {
   return player.email;
