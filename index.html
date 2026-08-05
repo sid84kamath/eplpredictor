@@ -230,6 +230,95 @@
       color: var(--border);
     }
 
+    .recent-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .recent-team {
+      min-width: 0;
+    }
+
+    .recent-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .recent-heading.away {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .form-chips {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .form-chips.away {
+      justify-content: flex-end;
+    }
+
+    .form-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      color: #050505;
+    }
+
+    .form-chip.win { background: var(--accent); }
+    .form-chip.draw { background: #f4d35e; }
+    .form-chip.loss { background: var(--danger); color: #fff; }
+
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .recent-list.away {
+      align-items: flex-end;
+      text-align: right;
+    }
+
+    .recent-fixture {
+      max-width: 100%;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-fixture strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .recent-empty {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
     .spinner-wrap {
       display: flex;
       flex-direction: column;
@@ -444,6 +533,10 @@
       .team { font-size: 12px; }
       .score-input { font-size: 24px; }
       .header-title { font-size: 18px; }
+      .recent-form { grid-template-columns: 1fr; }
+      .recent-heading.away { flex-direction: row; text-align: left; }
+      .form-chips.away { justify-content: flex-start; }
+      .recent-list.away { align-items: flex-start; text-align: left; }
     }
   </style>
 </head>
@@ -605,6 +698,9 @@
         card.className       = 'match-card';
         card.dataset.match_id = id;
 
+        const homeRecent = getPastFixturesForTeam(data.matches, m.homeTeam, date);
+        const awayRecent = getPastFixturesForTeam(data.matches, m.awayTeam, date);
+
         card.innerHTML = `
           <div class="match-meta">${when}</div>
           <div class="match-teams">
@@ -624,6 +720,10 @@
             <div class="score-sep">:</div>
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
               id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
+          </div>
+          <div class="recent-form">
+            ${renderRecentTeam(m.homeTeam, homeRecent, 'home')}
+            ${renderRecentTeam(m.awayTeam, awayRecent, 'away')}
           </div>`;
 
         matchesDiv.appendChild(card);
@@ -641,6 +741,84 @@
           <p>Failed to load fixtures.<br>${err.message || 'Please try again in a moment.'}</p>
         </div>`;
     }
+  }
+
+  function getTeamKey(team) {
+    return String(team?.id || team?.name || team?.shortName || '').trim().toLowerCase();
+  }
+
+  function isSameTeam(teamA, teamB) {
+    const idA = teamA?.id;
+    const idB = teamB?.id;
+    if (idA != null && idB != null) return String(idA) === String(idB);
+    return getTeamKey(teamA) === getTeamKey(teamB);
+  }
+
+  function getPastFixturesForTeam(matches, team, beforeDate) {
+    return matches
+      .filter(match => {
+        const isFinished = match.status === 'FINISHED';
+        const playedBeforeFixture = match.utcDate && new Date(match.utcDate) < beforeDate;
+        const involved = isSameTeam(match.homeTeam, team) || isSameTeam(match.awayTeam, team);
+        return isFinished && playedBeforeFixture && involved;
+      })
+      .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
+      .slice(0, 5)
+      .map(match => formatRecentFixture(match, team));
+  }
+
+  function formatRecentFixture(match, team) {
+    const isHome = isSameTeam(match.homeTeam, team);
+    const opponent = isHome ? match.awayTeam : match.homeTeam;
+    const score = match.score?.fullTime || {};
+    const teamGoals = isHome ? score.home : score.away;
+    const opponentGoals = isHome ? score.away : score.home;
+    const result = teamGoals > opponentGoals ? 'W' : teamGoals < opponentGoals ? 'L' : 'D';
+
+    return {
+      result,
+      venue: isHome ? 'vs' : '@',
+      opponent: opponent?.shortName || opponent?.name || 'Opponent',
+      score: `${teamGoals}-${opponentGoals}`,
+      date: new Date(match.utcDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' })
+    };
+  }
+
+  function renderRecentTeam(team, fixtures, side) {
+    const chips = fixtures.map(fixture => (
+      `<span class="form-chip ${getResultClass(fixture.result)}" title="${fixture.result} ${fixture.score} ${fixture.venue} ${escapeHTML(fixture.opponent)}">${fixture.result}</span>`
+    )).join('');
+
+    const rows = fixtures.length
+      ? fixtures.map(fixture => `
+          <div class="recent-fixture">
+            <strong>${fixture.result}</strong> ${fixture.score} ${fixture.venue} ${escapeHTML(fixture.opponent)} · ${fixture.date}
+          </div>
+        `).join('')
+      : '<div class="recent-empty">No completed matches yet</div>';
+
+    return `
+      <div class="recent-team">
+        <div class="recent-heading ${side}">
+          <span>${escapeHTML(team.shortName || team.name)} last 5</span>
+          <div class="form-chips ${side}">${chips}</div>
+        </div>
+        <div class="recent-list ${side}">${rows}</div>
+      </div>`;
+  }
+
+  function getResultClass(result) {
+    return result === 'W' ? 'win' : result === 'L' ? 'loss' : 'draw';
+  }
+
+  function escapeHTML(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
   }
 
   function onScoreInput(event) {
