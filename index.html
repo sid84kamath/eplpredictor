@@ -116,6 +116,10 @@
 
     .match-card:hover { border-color: #333; }
     .match-card.filled { border-color: var(--accent); }
+    .match-card.locked {
+      border-color: #3a2f12;
+      background: linear-gradient(180deg, #14120c 0%, var(--surface) 42%);
+    }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
@@ -222,6 +226,12 @@
     }
 
     .score-input::placeholder { color: #333; }
+    .score-input:disabled {
+      cursor: not-allowed;
+      opacity: 0.75;
+      color: #b8b8b8;
+      background: #151515;
+    }
 
     .score-sep {
       text-align: center;
@@ -635,17 +645,6 @@
         <span class="spinner-text">Loading...</span>
       </div>`;
 
-    try {
-      const checkRes    = await fetch(`${BACKEND_URL}?email=${encodeURIComponent(userEmail)}&check=1`);
-      const checkResult = await safeJSON(checkRes);
-      if (checkResult.status === 'duplicate') {
-        showAlreadySubmitted();
-        return;
-      }
-    } catch(e) {
-      // Check failed — let them through
-    }
-
     loadMatches();
   }
 
@@ -683,6 +682,15 @@
         ? upcoming
         : upcoming.filter(m => m.matchday === targetMatchday);
 
+      const predictionState = await fetchExistingPredictions(gameweek);
+      window.predictedMatchIds = new Set(predictionState.predictedMatchIds || []);
+      window.existingPredictions = predictionState.predictions || {};
+
+      if (gameweek.length > 0 && gameweek.every(m => isMatchLocked(m.id))) {
+        showAlreadySubmitted();
+        return;
+      }
+
       roundLabel.textContent = `Gameweek ${gameweek[0].matchday} · ${gameweek.length} matches`;
       matchesDiv.innerHTML = '';
 
@@ -700,6 +708,10 @@
 
         const homeRecent = getPastFixturesForTeam(data.matches, m.homeTeam, date);
         const awayRecent = getPastFixturesForTeam(data.matches, m.awayTeam, date);
+        const locked = isMatchLocked(id);
+        const existingPrediction = window.existingPredictions[id] || {};
+        const existingHomePred = locked && existingPrediction.home_pred !== undefined ? existingPrediction.home_pred : '';
+        const existingAwayPred = locked && existingPrediction.away_pred !== undefined ? existingPrediction.away_pred : '';
 
         card.innerHTML = `
           <div class="match-meta">${when}</div>
@@ -716,15 +728,22 @@
           </div>
           <div class="score-row">
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
-              id="home-${id}" oninput="onScoreInput(event)" inputmode="numeric">
+              id="home-${id}" oninput="onScoreInput(event)" inputmode="numeric"
+              value="${existingHomePred}" ${locked ? 'disabled' : ''}>
             <div class="score-sep">:</div>
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
+              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric"
+              value="${existingAwayPred}" ${locked ? 'disabled' : ''}>
+          </div>
+          ${locked ? '<div class="locked-label">🔒 Already predicted</div>' : ''}
               id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
           </div>
           <div class="recent-form">
             ${renderRecentTeam(m.homeTeam, homeRecent, 'home')}
             ${renderRecentTeam(m.awayTeam, awayRecent, 'away')}
           </div>`;
+
+        card.classList.toggle('locked', locked);
 
         matchesDiv.appendChild(card);
       });
@@ -741,6 +760,24 @@
           <p>Failed to load fixtures.<br>${err.message || 'Please try again in a moment.'}</p>
         </div>`;
     }
+  }
+
+  async function fetchExistingPredictions(gameweek) {
+    try {
+      const matchIds = gameweek.map(match => String(match.id)).join(',');
+      return await fetchJSONWithRetry(
+        `${BACKEND_URL}?email=${encodeURIComponent(userEmail)}&check=1&matchIds=${encodeURIComponent(matchIds)}`,
+        2,
+        800
+      );
+    } catch(e) {
+      console.warn('Prediction check failed — continuing with editable fixtures', e);
+      return { predictedMatchIds: [], predictions: {} };
+    }
+  }
+
+  function isMatchLocked(matchId) {
+    return window.predictedMatchIds && window.predictedMatchIds.has(String(matchId));
   }
 
   function getTeamKey(team) {
@@ -832,7 +869,7 @@
       const card = document.querySelector(`[data-match-id="${id}"]`);
       const h    = document.getElementById(`home-${id}`).value;
       const a    = document.getElementById(`away-${id}`).value;
-      if (card) card.classList.toggle('filled', h !== '' && a !== '');
+      if (card && !isMatchLocked(id)) card.classList.toggle('filled', h !== '' && a !== '');
     });
   }
 
@@ -853,9 +890,10 @@
 
   function updateProgress() {
     const matches = window.currentMatches || [];
-    const total   = matches.length;
+    const editableMatches = matches.filter(m => !isMatchLocked(m.id));
+    const total   = editableMatches.length;
     let   filled  = 0;
-    matches.forEach(m => {
+    editableMatches.forEach(m => {
       const id = String(m.id);
       const h  = document.getElementById(`home-${id}`)?.value;
       const a  = document.getElementById(`away-${id}`)?.value;
@@ -869,7 +907,7 @@
     const btn     = document.getElementById('submitBtn');
     const matches = window.currentMatches || [];
 
-    const predictions = matches.map(m => {
+    const predictions = matches.filter(m => !isMatchLocked(m.id)).map(m => {
       const id = String(m.id);
       return {
         match_id:  id,
@@ -898,7 +936,14 @@
       const result = await safeJSON(res);
 
       if (result.status === 'duplicate') {
-        showAlreadySubmitted();
+        (result.duplicateMatchIds || []).forEach(matchId => {
+          window.predictedMatchIds.add(String(matchId));
+          const card = document.querySelector(`[data-match-id="${matchId}"]`);
+          if (card) card.classList.add('locked');
+        });
+        showToast('Some matches were already predicted — refresh and try again', 'error');
+        btn.disabled = false;
+        btn.classList.remove('loading');
         return;
       }
 
