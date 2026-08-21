@@ -841,8 +841,6 @@
               value="${existingAwayPred}" ${locked ? 'disabled' : ''}>
           </div>
           ${locked ? '<div class="locked-label">🔒 Already predicted</div>' : ''}
-              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
-          </div>
           <div class="recent-form">
             ${renderRecentTeam(m.homeTeam, homeRecent, 'home')}
             ${renderRecentTeam(m.awayTeam, awayRecent, 'away')}
