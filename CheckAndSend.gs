@@ -33,19 +33,21 @@ function checkAndSendPredictions() {
   // normalize date (important)
   const nextDateStr = nextMatchDate.toISOString().split("T")[0];
   const currentGameweekKey = getGameweekKey(gameweek);
+  const isSeasonOpener = Number(gameweek[0].matchday) === 1;
 
   Logger.log("Next match date:", nextDateStr);
   Logger.log("Last sent:", lastSent);
   Logger.log("Current gameweek key:", currentGameweekKey);
   Logger.log("Last sent gameweek key:", lastSentGameweekKey);
   Logger.log("Previous gameweek matchday:", previousGameweekState.matchday);
+  Logger.log("Season opener:", isSeasonOpener);
 
-  if (previousGameweekState.totalFixtures === 0) {
+  if (!isSeasonOpener && previousGameweekState.totalFixtures === 0) {
     Logger.log("No previous gameweek fixtures found; skipping prediction emails");
     return;
   }
 
-  if (!previousGameweekState.allFinished) {
+  if (!isSeasonOpener && !previousGameweekState.allFinished) {
     Logger.log("Previous gameweek is not finished yet (" + previousGameweekState.finishedFixtures + "/" + previousGameweekState.totalFixtures + " matches finished)");
     return;
   }
@@ -55,7 +57,7 @@ function checkAndSendPredictions() {
     Logger.log("Already sent for this gameweek");
     return;
   }
-  Logger.log("Previous gameweek is complete; sending emails for upcoming gameweek with " + gameweek.length + " matches");
+  Logger.log((isSeasonOpener ? "Season opener detected" : "Previous gameweek is complete") + "; sending emails for upcoming gameweek with " + gameweek.length + " matches");
 
   const fixtureSheet = ss.getSheetByName("Fixtures");
   const fixtureData = fixtureSheet.getDataRange().getValues();
