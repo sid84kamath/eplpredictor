@@ -240,6 +240,111 @@
       color: var(--border);
     }
 
+    .locked-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 10px;
+      padding: 5px 9px;
+      border-radius: 99px;
+      background: rgba(244,211,94,0.08);
+      border: 1px solid rgba(244,211,94,0.22);
+      color: #f4d35e;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .recent-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .recent-team {
+      min-width: 0;
+    }
+
+    .recent-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .recent-heading.away {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .form-chips {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .form-chips.away {
+      justify-content: flex-end;
+    }
+
+    .form-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      color: #050505;
+    }
+
+    .form-chip.win { background: var(--accent); }
+    .form-chip.draw { background: #f4d35e; }
+    .form-chip.loss { background: var(--danger); color: #fff; }
+
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .recent-list.away {
+      align-items: flex-end;
+      text-align: right;
+    }
+
+    .recent-fixture {
+      max-width: 100%;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-fixture strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .recent-empty {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
     .recent-form {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -936,11 +1041,7 @@
       const result = await safeJSON(res);
 
       if (result.status === 'duplicate') {
-        (result.duplicateMatchIds || []).forEach(matchId => {
-          window.predictedMatchIds.add(String(matchId));
-          const card = document.querySelector(`[data-match-id="${matchId}"]`);
-          if (card) card.classList.add('locked');
-        });
+        lockDuplicateMatches(result.duplicateMatchIds || []);
         showToast('Some matches were already predicted — refresh and try again', 'error');
         btn.disabled = false;
         btn.classList.remove('loading');
@@ -975,6 +1076,35 @@
         <h2 class="locked">Already Submitted</h2>
         <p>You've already locked in your predictions for this gameweek. Good luck — results will be emailed after all matches are played.</p>
       </div>`;
+  }
+
+  function lockDuplicateMatches(matchIds) {
+    if (!window.predictedMatchIds) {
+      window.predictedMatchIds = new Set();
+    }
+
+    matchIds.forEach(matchId => {
+      const id = String(matchId);
+      window.predictedMatchIds.add(id);
+
+      const card = document.querySelector(`[data-match-id="${id}"]`);
+      if (!card) return;
+
+      card.classList.add('locked');
+      card.querySelectorAll('.score-input').forEach(input => {
+        input.disabled = true;
+      });
+
+      if (!card.querySelector('.locked-label')) {
+        const recentForm = card.querySelector('.recent-form');
+        const label = document.createElement('div');
+        label.className = 'locked-label';
+        label.textContent = '🔒 Already predicted';
+        card.insertBefore(label, recentForm);
+      }
+    });
+
+    updateProgress();
   }
 
   function showToast(msg, type = 'success') {
