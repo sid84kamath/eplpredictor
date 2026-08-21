@@ -75,7 +75,8 @@ export default {
     if (url.pathname === "/submit" && request.method === "GET") {
       try {
         const email    = url.searchParams.get("email");
-        const gasUrl   = `${GAS_URL}?email=${encodeURIComponent(email)}&check=1`;
+        const matchIds = url.searchParams.get("matchIds") || "";
+        const gasUrl   = `${GAS_URL}?email=${encodeURIComponent(email)}&action=check&check=1&matchIds=${encodeURIComponent(matchIds)}`;
         const gasRes   = await fetch(gasUrl);
         const text     = await gasRes.text();
         return new Response(text, {

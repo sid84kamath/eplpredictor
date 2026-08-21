@@ -29,19 +29,40 @@ function doGet(e) {
   }
 
   // ── Check if already submitted ──
-  if (action === 'check' && email) {
+  if ((action === 'check' || e.parameter.check === '1') && email) {
     var predSheet  = ss.getSheetByName('Predictions');
-    var stateSheet = ss.getSheetByName('State');
     var predData   = predSheet.getDataRange().getValues();
-    var currentDate = String(stateSheet.getRange("B2").getValue()).split('T')[0];
+    var requestedMatchIds = getRequestedMatchIds_(e.parameter.matchIds);
+    var predictedMatchIds = [];
+    var predictionsByMatchId = {};
 
-    var alreadySubmitted = predData.some(function(row) {
-      var rowDate = row[0] ? String(new Date(row[0]).toISOString()).split('T')[0] : '';
-      return String(row[1]) === email && rowDate === currentDate;
-    });
+    for (var i = 1; i < predData.length; i++) {
+      var row = predData[i];
+      var matchId = String(row[2] || '');
+
+      if (String(row[1]) !== email || !matchId) {
+        continue;
+      }
+
+      if (requestedMatchIds && requestedMatchIds[matchId] !== true) {
+        continue;
+      }
+
+      if (!predictionsByMatchId[matchId]) {
+        predictedMatchIds.push(matchId);
+        predictionsByMatchId[matchId] = {
+          home_pred: parseInt(row[3], 10),
+          away_pred: parseInt(row[4], 10)
+        };
+      }
+    }
 
     return ContentService
-      .createTextOutput(JSON.stringify({ status: alreadySubmitted ? 'duplicate' : 'ok' }))
+      .createTextOutput(JSON.stringify({
+        status: 'ok',
+        predictedMatchIds: predictedMatchIds,
+        predictions: predictionsByMatchId
+      }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -59,9 +80,6 @@ function doPost(e) {
 
     var ss         = SpreadsheetApp.openById('1x1x-AODInrXF1FYNMls63GdQt96EdSl_LmRysok-jcM');
     var sheet      = ss.getSheetByName('Predictions');
-    var stateSheet = ss.getSheetByName('State');
-
-    var currentDate = String(stateSheet.getRange("B2").getValue()).split('T')[0];
     var predictions = batch || [{
       match_id: body.match_id,
       home_pred: body.home_pred,
@@ -100,23 +118,25 @@ function doPost(e) {
     var existingMatchIds = {};
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      try {
-        var rowDate = row[0] ? new Date(row[0]).toISOString().split('T')[0] : '';
-        if (String(row[1]) === email && rowDate === currentDate) {
-          existingMatchIds[String(row[2])] = true;
-        }
-      } catch(dateErr) {
-        continue; // skip rows with unparseable dates
+      if (String(row[1]) === email) {
+        existingMatchIds[String(row[2])] = true;
       }
     }
 
-    var hasDuplicate = predictions.some(function(prediction) {
-      return existingMatchIds[prediction.match_id] === true;
+    var duplicateMatchIds = predictions
+      .filter(function(prediction) {
+        return existingMatchIds[prediction.match_id] === true;
+      })
+      .map(function(prediction) {
+        return prediction.match_id;
     });
 
-    if (hasDuplicate) {
+    if (duplicateMatchIds.length > 0) {
       return ContentService
-        .createTextOutput(JSON.stringify({ status: 'duplicate' }))
+        .createTextOutput(JSON.stringify({
+          status: 'duplicate',
+          duplicateMatchIds: duplicateMatchIds
+        }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -141,4 +161,23 @@ function doPost(e) {
       .createTextOutput(JSON.stringify({ status: 'error', message: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function getRequestedMatchIds_(rawMatchIds) {
+  if (!rawMatchIds) {
+    return null;
+  }
+
+  return String(rawMatchIds)
+    .split(',')
+    .map(function(matchId) {
+      return String(matchId).trim();
+    })
+    .filter(function(matchId) {
+      return matchId;
+    })
+    .reduce(function(matchIds, matchId) {
+      matchIds[matchId] = true;
+      return matchIds;
+    }, {});
 }
