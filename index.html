@@ -116,6 +116,10 @@
 
     .match-card:hover { border-color: #333; }
     .match-card.filled { border-color: var(--accent); }
+    .match-card.locked {
+      border-color: #3a2f12;
+      background: linear-gradient(180deg, #14120c 0%, var(--surface) 42%);
+    }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
@@ -222,12 +226,123 @@
     }
 
     .score-input::placeholder { color: #333; }
+    .score-input:disabled {
+      cursor: not-allowed;
+      opacity: 0.75;
+      color: #b8b8b8;
+      background: #151515;
+    }
 
     .score-sep {
       text-align: center;
       font-family: 'Bebas Neue', sans-serif;
       font-size: 22px;
       color: var(--border);
+    }
+
+    .locked-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 10px;
+      padding: 5px 9px;
+      border-radius: 99px;
+      background: rgba(244,211,94,0.08);
+      border: 1px solid rgba(244,211,94,0.22);
+      color: #f4d35e;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .recent-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .recent-team {
+      min-width: 0;
+    }
+
+    .recent-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 7px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .recent-heading.away {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .form-chips {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .form-chips.away {
+      justify-content: flex-end;
+    }
+
+    .form-chip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 800;
+      color: #050505;
+    }
+
+    .form-chip.win { background: var(--accent); }
+    .form-chip.draw { background: #f4d35e; }
+    .form-chip.loss { background: var(--danger); color: #fff; }
+
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .recent-list.away {
+      align-items: flex-end;
+      text-align: right;
+    }
+
+    .recent-fixture {
+      max-width: 100%;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-fixture strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .recent-empty {
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
     }
 
     .spinner-wrap {
@@ -444,6 +559,10 @@
       .team { font-size: 12px; }
       .score-input { font-size: 24px; }
       .header-title { font-size: 18px; }
+      .recent-form { grid-template-columns: 1fr; }
+      .recent-heading.away { flex-direction: row; text-align: left; }
+      .form-chips.away { justify-content: flex-start; }
+      .recent-list.away { align-items: flex-start; text-align: left; }
     }
   </style>
 </head>
@@ -542,17 +661,6 @@
         <span class="spinner-text">Loading...</span>
       </div>`;
 
-    try {
-      const checkRes    = await fetch(`${BACKEND_URL}?email=${encodeURIComponent(userEmail)}&check=1`);
-      const checkResult = await safeJSON(checkRes);
-      if (checkResult.status === 'duplicate') {
-        showAlreadySubmitted();
-        return;
-      }
-    } catch(e) {
-      // Check failed — let them through
-    }
-
     loadMatches();
   }
 
@@ -590,6 +698,15 @@
         ? upcoming
         : upcoming.filter(m => m.matchday === targetMatchday);
 
+      const predictionState = await fetchExistingPredictions(gameweek);
+      window.predictedMatchIds = new Set(predictionState.predictedMatchIds || []);
+      window.existingPredictions = predictionState.predictions || {};
+
+      if (gameweek.length > 0 && gameweek.every(m => isMatchLocked(m.id))) {
+        showAlreadySubmitted();
+        return;
+      }
+
       roundLabel.textContent = `Gameweek ${gameweek[0].matchday} · ${gameweek.length} matches`;
       matchesDiv.innerHTML = '';
 
@@ -604,6 +721,13 @@
         const card = document.createElement('div');
         card.className       = 'match-card';
         card.dataset.match_id = id;
+
+        const homeRecent = getPastFixturesForTeam(data.matches, m.homeTeam, date);
+        const awayRecent = getPastFixturesForTeam(data.matches, m.awayTeam, date);
+        const locked = isMatchLocked(id);
+        const existingPrediction = window.existingPredictions[id] || {};
+        const existingHomePred = locked && existingPrediction.home_pred !== undefined ? existingPrediction.home_pred : '';
+        const existingAwayPred = locked && existingPrediction.away_pred !== undefined ? existingPrediction.away_pred : '';
 
         card.innerHTML = `
           <div class="match-meta">${when}</div>
@@ -620,11 +744,20 @@
           </div>
           <div class="score-row">
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
-              id="home-${id}" oninput="onScoreInput(event)" inputmode="numeric">
+              id="home-${id}" oninput="onScoreInput(event)" inputmode="numeric"
+              value="${existingHomePred}" ${locked ? 'disabled' : ''}>
             <div class="score-sep">:</div>
             <input class="score-input" type="number" min="0" max="20" placeholder="–"
-              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
+              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric"
+              value="${existingAwayPred}" ${locked ? 'disabled' : ''}>
+          </div>
+          ${locked ? '<div class="locked-label">🔒 Already predicted</div>' : ''}
+          <div class="recent-form">
+            ${renderRecentTeam(m.homeTeam, homeRecent, 'home')}
+            ${renderRecentTeam(m.awayTeam, awayRecent, 'away')}
           </div>`;
+
+        card.classList.toggle('locked', locked);
 
         matchesDiv.appendChild(card);
       });
@@ -643,6 +776,102 @@
     }
   }
 
+  async function fetchExistingPredictions(gameweek) {
+    try {
+      const matchIds = gameweek.map(match => String(match.id)).join(',');
+      return await fetchJSONWithRetry(
+        `${BACKEND_URL}?email=${encodeURIComponent(userEmail)}&check=1&matchIds=${encodeURIComponent(matchIds)}`,
+        2,
+        800
+      );
+    } catch(e) {
+      console.warn('Prediction check failed — continuing with editable fixtures', e);
+      return { predictedMatchIds: [], predictions: {} };
+    }
+  }
+
+  function isMatchLocked(matchId) {
+    return window.predictedMatchIds && window.predictedMatchIds.has(String(matchId));
+  }
+
+  function getTeamKey(team) {
+    return String(team?.id || team?.name || team?.shortName || '').trim().toLowerCase();
+  }
+
+  function isSameTeam(teamA, teamB) {
+    const idA = teamA?.id;
+    const idB = teamB?.id;
+    if (idA != null && idB != null) return String(idA) === String(idB);
+    return getTeamKey(teamA) === getTeamKey(teamB);
+  }
+
+  function getPastFixturesForTeam(matches, team, beforeDate) {
+    return matches
+      .filter(match => {
+        const isFinished = match.status === 'FINISHED';
+        const playedBeforeFixture = match.utcDate && new Date(match.utcDate) < beforeDate;
+        const involved = isSameTeam(match.homeTeam, team) || isSameTeam(match.awayTeam, team);
+        return isFinished && playedBeforeFixture && involved;
+      })
+      .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
+      .slice(0, 5)
+      .map(match => formatRecentFixture(match, team));
+  }
+
+  function formatRecentFixture(match, team) {
+    const isHome = isSameTeam(match.homeTeam, team);
+    const opponent = isHome ? match.awayTeam : match.homeTeam;
+    const score = match.score?.fullTime || {};
+    const teamGoals = isHome ? score.home : score.away;
+    const opponentGoals = isHome ? score.away : score.home;
+    const result = teamGoals > opponentGoals ? 'W' : teamGoals < opponentGoals ? 'L' : 'D';
+
+    return {
+      result,
+      venue: isHome ? 'vs' : '@',
+      opponent: opponent?.shortName || opponent?.name || 'Opponent',
+      score: `${teamGoals}-${opponentGoals}`,
+      date: new Date(match.utcDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' })
+    };
+  }
+
+  function renderRecentTeam(team, fixtures, side) {
+    const chips = fixtures.map(fixture => (
+      `<span class="form-chip ${getResultClass(fixture.result)}" title="${fixture.result} ${fixture.score} ${fixture.venue} ${escapeHTML(fixture.opponent)}">${fixture.result}</span>`
+    )).join('');
+
+    const rows = fixtures.length
+      ? fixtures.map(fixture => `
+          <div class="recent-fixture">
+            <strong>${fixture.result}</strong> ${fixture.score} ${fixture.venue} ${escapeHTML(fixture.opponent)} · ${fixture.date}
+          </div>
+        `).join('')
+      : '<div class="recent-empty">No completed matches yet</div>';
+
+    return `
+      <div class="recent-team">
+        <div class="recent-heading ${side}">
+          <span>${escapeHTML(team.shortName || team.name)} last 5</span>
+          <div class="form-chips ${side}">${chips}</div>
+        </div>
+        <div class="recent-list ${side}">${rows}</div>
+      </div>`;
+  }
+
+  function getResultClass(result) {
+    return result === 'W' ? 'win' : result === 'L' ? 'loss' : 'draw';
+  }
+
+  function escapeHTML(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
   function onScoreInput(event) {
     if (event && event.target && event.target.value !== '') {
       focusNextScoreInput(event.target);
@@ -654,12 +883,12 @@
       const card = document.querySelector(`[data-match-id="${id}"]`);
       const h    = document.getElementById(`home-${id}`).value;
       const a    = document.getElementById(`away-${id}`).value;
-      if (card) card.classList.toggle('filled', h !== '' && a !== '');
+      if (card && !isMatchLocked(id)) card.classList.toggle('filled', h !== '' && a !== '');
     });
   }
 
   function focusNextScoreInput(currentInput) {
-    const scoreInputs = Array.from(document.querySelectorAll('.score-input'));
+    const scoreInputs = Array.from(document.querySelectorAll('.score-input:not(:disabled)'));
     const currentIndex = scoreInputs.indexOf(currentInput);
 
     if (currentIndex === -1 || currentIndex === scoreInputs.length - 1) {
@@ -675,9 +904,10 @@
 
   function updateProgress() {
     const matches = window.currentMatches || [];
-    const total   = matches.length;
+    const editableMatches = matches.filter(m => !isMatchLocked(m.id));
+    const total   = editableMatches.length;
     let   filled  = 0;
-    matches.forEach(m => {
+    editableMatches.forEach(m => {
       const id = String(m.id);
       const h  = document.getElementById(`home-${id}`)?.value;
       const a  = document.getElementById(`away-${id}`)?.value;
@@ -691,7 +921,7 @@
     const btn     = document.getElementById('submitBtn');
     const matches = window.currentMatches || [];
 
-    const predictions = matches.map(m => {
+    const predictions = matches.filter(m => !isMatchLocked(m.id)).map(m => {
       const id = String(m.id);
       return {
         match_id:  id,
@@ -720,7 +950,10 @@
       const result = await safeJSON(res);
 
       if (result.status === 'duplicate') {
-        showAlreadySubmitted();
+        lockDuplicateMatches(result.duplicateMatchIds || []);
+        showToast('Some matches were already predicted — refresh and try again', 'error');
+        btn.disabled = false;
+        btn.classList.remove('loading');
         return;
       }
 
@@ -752,6 +985,35 @@
         <h2 class="locked">Already Submitted</h2>
         <p>You've already locked in your predictions for this gameweek. Good luck — results will be emailed after all matches are played.</p>
       </div>`;
+  }
+
+  function lockDuplicateMatches(matchIds) {
+    if (!window.predictedMatchIds) {
+      window.predictedMatchIds = new Set();
+    }
+
+    matchIds.forEach(matchId => {
+      const id = String(matchId);
+      window.predictedMatchIds.add(id);
+
+      const card = document.querySelector(`[data-match-id="${id}"]`);
+      if (!card) return;
+
+      card.classList.add('locked');
+      card.querySelectorAll('.score-input').forEach(input => {
+        input.disabled = true;
+      });
+
+      if (!card.querySelector('.locked-label')) {
+        const recentForm = card.querySelector('.recent-form');
+        const label = document.createElement('div');
+        label.className = 'locked-label';
+        label.textContent = '🔒 Already predicted';
+        card.insertBefore(label, recentForm);
+      }
+    });
+
+    updateProgress();
   }
 
   function showToast(msg, type = 'success') {
