@@ -240,22 +240,6 @@
       color: var(--border);
     }
 
-    .locked-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      margin-top: 10px;
-      padding: 5px 9px;
-      border-radius: 99px;
-      background: rgba(244,211,94,0.08);
-      border: 1px solid rgba(244,211,94,0.22);
-      color: #f4d35e;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
     .recent-form {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -752,6 +736,8 @@
               value="${existingAwayPred}" ${locked ? 'disabled' : ''}>
           </div>
           ${locked ? '<div class="locked-label">🔒 Already predicted</div>' : ''}
+              id="away-${id}" oninput="onScoreInput(event)" inputmode="numeric">
+          </div>
           <div class="recent-form">
             ${renderRecentTeam(m.homeTeam, homeRecent, 'home')}
             ${renderRecentTeam(m.awayTeam, awayRecent, 'away')}
