@@ -91,6 +91,23 @@ export default {
       }
     }
 
+    // Public predictions board for the gameweek currently in progress.
+    if (url.pathname === "/predictions" && request.method === "GET") {
+      try {
+        const gasRes = await fetch(`${GAS_URL}?action=predictions`);
+        const text = await gasRes.text();
+        return new Response(text, {
+          status: gasRes.ok ? 200 : 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ status: 'error', message: err.message }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     // ✅ Handle predictions submit — POST /submit
     if (url.pathname === "/submit" && request.method === "POST") {
       try {

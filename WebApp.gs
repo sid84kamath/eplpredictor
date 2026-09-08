@@ -28,6 +28,14 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // ── Return every player's predictions for the gameweek in progress ──
+  // Emails never leave this endpoint: the public response is built from PLAYERS.
+  if (action === 'predictions') {
+    return ContentService
+      .createTextOutput(JSON.stringify(getCurrentGameweekPredictions_(ss)))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // ── Check if already submitted ──
   if ((action === 'check' || e.parameter.check === '1') && email) {
     var predSheet  = ss.getSheetByName('Predictions');
@@ -180,4 +188,88 @@ function getRequestedMatchIds_(rawMatchIds) {
       matchIds[matchId] = true;
       return matchIds;
     }, {});
+}
+
+function getCurrentGameweekPredictions_(ss) {
+  var response = fetchFootballData('/competitions/PL/matches');
+  var allMatches = JSON.parse(response.getContentText()).matches || [];
+  var now = new Date();
+  var matchesByMatchday = {};
+
+  allMatches.forEach(function(match) {
+    var matchday = match.matchday;
+    if (matchday === undefined || matchday === null || !match.utcDate) {
+      return;
+    }
+
+    if (!matchesByMatchday[matchday]) {
+      matchesByMatchday[matchday] = [];
+    }
+    matchesByMatchday[matchday].push(match);
+  });
+
+  var currentGameweek = Object.keys(matchesByMatchday)
+    .map(function(matchday) { return matchesByMatchday[matchday]; })
+    .filter(function(matches) {
+      var hasStarted = matches.some(function(match) {
+        return new Date(match.utcDate) <= now;
+      });
+      var hasNotFinished = matches.some(function(match) {
+        return match.status !== 'FINISHED';
+      });
+      return hasStarted && hasNotFinished;
+    })
+    .sort(function(a, b) {
+      return Number(b[0].matchday) - Number(a[0].matchday);
+    })[0];
+
+  if (!currentGameweek) {
+    return { status: 'not_started', matches: [], players: [] };
+  }
+
+  currentGameweek.sort(function(a, b) {
+    return new Date(a.utcDate) - new Date(b.utcDate);
+  });
+
+  var matchIds = {};
+  currentGameweek.forEach(function(match) {
+    matchIds[String(match.id)] = true;
+  });
+
+  var predictionsByEmail = {};
+  var predictionRows = ss.getSheetByName('Predictions').getDataRange().getValues();
+  for (var i = 1; i < predictionRows.length; i++) {
+    var row = predictionRows[i];
+    var email = String(row[1] || '');
+    var matchId = String(row[2] || '');
+    var homeScore = parseInt(row[3], 10);
+    var awayScore = parseInt(row[4], 10);
+
+    if (!email || !matchIds[matchId] || isNaN(homeScore) || isNaN(awayScore)) {
+      continue;
+    }
+    if (!predictionsByEmail[email]) {
+      predictionsByEmail[email] = {};
+    }
+    predictionsByEmail[email][matchId] = { homeScore: homeScore, awayScore: awayScore };
+  }
+
+  return {
+    status: 'ok',
+    matchday: currentGameweek[0].matchday,
+    matches: currentGameweek.map(function(match) {
+      return {
+        id: String(match.id),
+        homeTeam: match.homeTeam.shortName || match.homeTeam.name,
+        awayTeam: match.awayTeam.shortName || match.awayTeam.name,
+        utcDate: match.utcDate
+      };
+    }),
+    players: PLAYERS.map(function(player) {
+      return {
+        name: player.name,
+        predictions: predictionsByEmail[player.email] || {}
+      };
+    })
+  };
 }
